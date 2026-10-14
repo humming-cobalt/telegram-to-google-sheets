@@ -1,1 +1,2 @@
 734183907d5993f797a970d02f3d17b91225cf8b971da3c1f2d1947fe4e97e6a  telegram-to-sheets-v1.0.0.zip
+20e5c81e40c1edfd8692c44d48e6e6f011436fae564ece72d588560ac5f6a5c0  telegram-to-sheets-v1.0.1.zip

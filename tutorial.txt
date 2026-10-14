@@ -51,3 +51,14 @@ References
 https://docs.n8n.io/integrations/builtin/app-nodes/n8n-nodes-base.googlesheets/sheet-operations/
 https://docs.apify.com/api/v2/actors-runs-post
 https://docs.apify.com/api/v2/dataset-items-get
+
+
+Version 1.0.1: clearer results and recovery
+
+The final Check run health step now shows the original error code and affected channels. A first from_now check explains that its starting checkpoint was saved. Partial runs explain how to continue collection with the same monitor ID and filters. To retry a Sheets import, keep the original run ID in resumeRunId; this re-reads saved rows without starting another collection. To collect the next batch, clear resumeRunId; each new collection has a start fee.
+
+The Actor report also explains empty date windows and shows the newest/oldest publication dates observed on fetched pages. If Telegram asks for a long cooldown, respect error.retryAfterSeconds before collecting again. Older reports remain readable by the workflow.
+
+Document filenames and sizes are available in the Actor dataset under documents when Telegram exposes them. This seven-column Sheets template is unchanged; document files without public direct sources are not downloaded.
+
+The original live Sheets tests still apply to the import path, which is unchanged. The new final-step diagnostics were tested with automated fixtures covering invalid input, partial runs, mixed channel failures, missing reports, and empty baselines.
