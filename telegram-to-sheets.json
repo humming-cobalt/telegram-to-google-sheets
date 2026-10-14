@@ -1,0 +1,712 @@
+{
+  "name": "Public Telegram channels to Google Sheets \u2014 resumable import",
+  "nodes": [
+    {
+      "id": "198eaab6-33f9-46fb-8862-14688f72e59d",
+      "name": "Run manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "1f4bab7f-5dd1-40be-9255-d2df8c4711c5",
+      "name": "Configuration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "jsCode": "// Use a unique monitorId for your feed. Keep it unchanged between collections.\n// To retry a Sheets import, set resumeRunId to the ORIGINAL Apify run ID.\n// Credentials belong in n8n Credentials, never in this code.\nconst config = {\n actorId:'rm4iUmn6dCIoClTps',\n resumeRunId:'',\n maxTotalChargeUsd:0.05,\n input:{channels:['bbcrussian'],monitorId:'telegram-sheets-demo',firstRunMode:'recent',initialLookbackHours:24,keywords:[],maxPostsPerChannel:20,maxPagesPerChannel:10,requestDelayMs:600,maxChargeUsd:0.05}\n};\nconfig.resumeRunId = config.resumeRunId.trim();\nif (config.resumeRunId && !/^[A-Za-z0-9]+$/.test(config.resumeRunId)) throw new Error('Paste only the Apify run ID, not a URL.');\nif (!Number.isFinite(config.maxTotalChargeUsd) || config.maxTotalChargeUsd < 0.01 || config.maxTotalChargeUsd > 1) throw new Error('Demo platform budget must be between $0.01 and $1.');\nreturn [{json:config}];"
+      }
+    },
+    {
+      "id": "5ac82ff9-936d-4b85-a8da-7831df8e1eee",
+      "name": "Resume existing run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dcc6c25b-34fa-4170-abae-87d47545dc3a",
+              "leftValue": "={{ $json.resumeRunId.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4f3a8e7c-0672-4ab7-9892-d0824606b004",
+      "name": "Load existing run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        660,
+        -160
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.apify.com/v2/actor-runs/' + encodeURIComponent($json.resumeRunId) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "703a3b8e-2900-4abd-8b89-875813335699",
+      "name": "Start one run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        660,
+        120
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.apify.com/v2/acts/' + encodeURIComponent($json.actorId) + '/runs' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "method": "POST",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "memory",
+              "value": "512"
+            },
+            {
+              "name": "timeout",
+              "value": "180"
+            },
+            {
+              "name": "restartOnError",
+              "value": "false"
+            },
+            {
+              "name": "maxTotalChargeUsd",
+              "value": "={{ $json.maxTotalChargeUsd }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.input) }}"
+      }
+    },
+    {
+      "id": "b08de9e9-3a72-4183-b93a-551acd023cc0",
+      "name": "Inspect run",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const run = $input.first().json.data;\nif (!run?.id || !run.status) throw new Error('Apify did not return a run ID and status. Check Console before starting another run.');\nconst terminal = ['SUCCEEDED','FAILED','TIMED-OUT','ABORTED'].includes(run.status);\nif (!terminal && $runIndex >= 60) throw new Error('Polling stopped. Resume run '+run.id+'; do not start a replacement.');\nreturn [{json:{run,terminal}}];"
+      }
+    },
+    {
+      "id": "b7c5142e-cddb-413b-bde2-5fdfa40041a6",
+      "name": "Run finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2a6f2bba-39b2-4918-8e14-7560b8ffb910",
+              "leftValue": "={{ $json.terminal }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "552d9116-4665-4957-a6ab-c772aa03e5a6",
+      "name": "Wait five seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        250
+      ],
+      "parameters": {
+        "amount": 5,
+        "unit": "seconds"
+      },
+      "webhookId": "c653e3cf-b14a-49b8-b737-a3db2734150a"
+    },
+    {
+      "id": "33b2235a-90a3-4eaa-ade6-bd207f6d02a9",
+      "name": "Poll same run",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        900,
+        250
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.apify.com/v2/actor-runs/' + encodeURIComponent($json.run.id) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "d6a9f2fe-4c42-43b6-a6f3-9f9f164a0208",
+      "name": "Get report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1340,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.apify.com/v2/key-value-stores/' + encodeURIComponent($json.run.defaultKeyValueStoreId) + '/records/REPORT' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "2a221a6d-3a34-4c6b-861a-3e2c7a2117e2",
+      "name": "Keep run and report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst run = $('Inspect run').item.json.run;\nif (response.statusCode !== 200 && response.statusCode !== 404) throw new Error('Could not read report for '+run.id+'. Resume this run after fixing API access.');\nconst report = response.statusCode === 200 ? response.body : null;\nreturn [{json:{run,report}}];"
+      }
+    },
+    {
+      "id": "a0b570de-984a-453b-8e8b-78f41edb5e39",
+      "name": "Get saved posts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1780,
+        0
+      ],
+      "parameters": {
+        "url": "={{ 'https://api.apify.com/v2/datasets/' + encodeURIComponent($json.run.defaultDatasetId) + '/items?format=json&clean=true&limit=10000' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "9efe43e1-6adb-4326-a5e9-db5ef9cbd50d",
+      "name": "Prepare rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst context = $('Keep run and report').item.json;\nif (response.statusCode !== 200 || !Array.isArray(response.body)) throw new Error('Dataset could not be read. Resume this same run ID.');\nconst total = Number(response.headers?.['x-apify-pagination-total']);\nif (Number.isFinite(total) && total > response.body.length) throw new Error('Dataset has more rows than this demo fetched. Export the full dataset before proceeding.');\n// Sheets uses RAW: preserve text literally, including formula-like prefixes.\nconst safe = value => String(value ?? '');\nconst unique = new Map();\nfor (const p of response.body) {\n if (!p.id || !p.channel || !p.publishedAt || !p.url) throw new Error('Unexpected post row. Inspect the original dataset.');\n unique.set(p.id,{id:p.id,channel:safe(p.channel),publishedAt:p.publishedAt,text:safe(p.text),url:p.url,views:p.views ?? '',runId:context.run.id});\n}\nconst posts=[...unique.values()];\nconst healthy=context.run.status==='SUCCEEDED' && ['COMPLETE','EMPTY'].includes(context.report?.outcome);\nreturn [{json:{...context,posts,needsAttention:!healthy}}];"
+      }
+    },
+    {
+      "id": "64c90db4-d9d8-4326-9d77-aaab608cd18a",
+      "name": "Has posts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2220,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "742e8f74-5812-468b-8683-3c47ceeb75fc",
+              "leftValue": "={{ $json.posts.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a72564e8-d9a8-4616-9032-b696b9ffec6c",
+      "name": "One row per post",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2440,
+        -120
+      ],
+      "parameters": {
+        "jsCode": "return $input.first().json.posts.map(p => ({json:p,pairedItem:{item:0}}));"
+      }
+    },
+    {
+      "id": "264b42a2-c72e-4b4a-8254-a28ed5c0f543",
+      "name": "Upsert into Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2660,
+        -120
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "REPLACE_WITH_YOUR_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Posts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "channel": "={{ $json.channel }}",
+            "publishedAt": "={{ $json.publishedAt }}",
+            "text": "={{ $json.text }}",
+            "url": "={{ $json.url }}",
+            "views": "={{ $json.views }}",
+            "runId": "={{ $json.runId }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "publishedAt",
+              "displayName": "publishedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "views",
+              "displayName": "views",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "runId",
+              "displayName": "runId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "RAW"
+        }
+      }
+    },
+    {
+      "id": "c03eb42f-e7a8-4a73-847c-639a46e30c39",
+      "name": "Check run health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const data = $('Prepare rows').first().json;\nif (data.needsAttention) throw new Error('Available rows imported. Run '+data.run.id+' needs attention: platform '+data.run.status+', report '+(data.report?.outcome ?? 'missing')+', stop '+(data.report?.stopReason ?? 'none')+'. Inspect REPORT before scheduling another collection.');\nreturn [{json:{runId:data.run.id,outcome:data.report.outcome,importedUniqueRows:data.posts.length}}];"
+      }
+    },
+    {
+      "id": "41338e3a-6690-4671-b640-3674d1b536b8",
+      "name": "Read before running",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -660
+      ],
+      "parameters": {
+        "content": "## Telegram \u2192 Google Sheets\nManual trigger only. Connect your own credentials and test manually before scheduling.\n\n1. Create a Posts tab with headers: id, channel, publishedAt, text, url, views, runId.\n2. Select your Apify HTTP Header Auth credential on all FIVE HTTP nodes (Authorization: Bearer TOKEN).\n3. Select Google Sheets credentials and your spreadsheet in Upsert into Google Sheets. Keep match column id and Cell Format = Let n8n format (RAW).\n4. Review Configuration: example public news channel, 20 posts maximum, $0.05 event cap per new run. Change channel and monitorId for your own feed.\n\nAfter a Sheets failure, set resumeRunId to the original run ID. Import sequentially; do not run two writers on the same sheet. An uncertain start request may have started a run: check Apify Console before retrying.\n\nActor: https://apify.com/humming_cobalt/telegram-channel-watch\nPrice: $0.005/run + $0.001/post. Sheets/n8n may have separate costs.",
+        "height": 580,
+        "width": 620
+      }
+    }
+  ],
+  "connections": {
+    "Run manually": {
+      "main": [
+        [
+          {
+            "node": "Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuration": {
+      "main": [
+        [
+          {
+            "node": "Resume existing run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume existing run?": {
+      "main": [
+        [
+          {
+            "node": "Load existing run",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start one run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load existing run": {
+      "main": [
+        [
+          {
+            "node": "Inspect run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start one run": {
+      "main": [
+        [
+          {
+            "node": "Inspect run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inspect run": {
+      "main": [
+        [
+          {
+            "node": "Run finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run finished?": {
+      "main": [
+        [
+          {
+            "node": "Get report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait five seconds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait five seconds": {
+      "main": [
+        [
+          {
+            "node": "Poll same run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Poll same run": {
+      "main": [
+        [
+          {
+            "node": "Inspect run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get report": {
+      "main": [
+        [
+          {
+            "node": "Keep run and report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep run and report": {
+      "main": [
+        [
+          {
+            "node": "Get saved posts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get saved posts": {
+      "main": [
+        [
+          {
+            "node": "Prepare rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare rows": {
+      "main": [
+        [
+          {
+            "node": "Has posts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has posts?": {
+      "main": [
+        [
+          {
+            "node": "One row per post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Check run health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "One row per post": {
+      "main": [
+        [
+          {
+            "node": "Upsert into Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert into Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Check run health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveExecutionProgress": true,
+    "executionTimeout": 600
+  },
+  "pinData": {},
+  "tags": []
+}

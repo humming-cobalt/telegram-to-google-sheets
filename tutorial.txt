@@ -1,0 +1,53 @@
+Telegram to Google Sheets: collect posts and retry imports without duplicate rows
+
+A growing Telegram feed is useful only if repeat checks do not keep adding the same old posts. This workflow uses an Apify scraper to save collection progress, then matches Google Sheets rows by the original post ID. A failed Sheets import can be retried from the saved Apify run.
+
+Disclosure: I built and maintain the paid Apify Actor used in this guide. The workflow template is free to download. Apify Actor events cost $0.005 per run plus $0.001 per delivered post. n8n hosting and other platform services may have separate charges.
+
+What you need
+• An Apify account and an API token stored in n8n Credentials.
+• An n8n instance and a Google Sheets credential.
+• A spreadsheet with a Posts tab and these exact headers in row 1:
+id, channel, publishedAt, text, url, views, runId
+• The accompanying telegram-to-sheets.json workflow.
+
+1. Import the workflow
+Use n8n’s workflow import option and select the JSON file. Keep the manual trigger while setting up. This template does not enable a schedule.
+
+2. Connect Apify
+Create an HTTP Header Auth credential with header name Authorization and value Bearer followed by ONE SPACE and your full Apify API token (Bearer apify_api_…). Omitting Bearer causes “Authentication token was not provided”. Select that credential on Load existing run, Start one run, Poll same run, Get report and Get saved posts. Never paste a token into a URL or the workflow’s Configuration node.
+
+3. Connect Google Sheets
+In Upsert into Google Sheets, select your Google credential and replace REPLACE_WITH_YOUR_SHEET_ID with your spreadsheet ID. Choose the Posts tab. Keep Append or Update Row, match column id, and Cell Format = Let n8n format (RAW). RAW stores text literally, rather than evaluating strings beginning with an equals sign. If you export a CSV later, review how the destination application handles formulas.
+
+For local n8n, use a Google OAuth web client with callback http://localhost:5678/rest/oauth2-credential/callback. Enable Sheets and Drive APIs and add your Google account under Google Auth Platform → Audience → Test users. Complete Sign in with Google until n8n shows Account connected. A saved client ID and secret alone are not a connected account. The spreadsheet must be owned by or shared for editing with that same Google account. Testing-mode Google authorizations can expire after seven days; reconnect as needed.
+
+4. Choose your feed
+Open Configuration. Replace the example channel with a public Telegram channel that has a readable web preview. Choose a monitorId unique to this feed and keep it unchanged between collections. The supplied example uses bbcrussian, a public Russian-language news channel; it is an example, not an endorsement. The workflow requests recent posts from the last 24 hours, at most 20 per channel, with a $0.05 event cap per run. You can adjust those values. Start with one channel.
+
+5. Execute once
+Run the workflow manually. It starts one Actor run, waits for a terminal status, reads the report and saved dataset, then imports available posts. Check the sheet’s id, text and runId columns against the Apify dataset. Twenty delivered posts cost $0.025 in Actor events: $0.005 to start plus $0.020 for posts. Fewer posts cost less, but empty or failed starts still incur the start fee.
+
+6. Test a safe import retry
+Copy that Apify run ID into Configuration.resumeRunId. Execute again. This reads the original run rather than starting another collection. Existing IDs should update rather than create extra rows. This does not add a new Actor start or post fee; retained storage and API usage can have separate charges. Clear resumeRunId when you want to collect new posts again.
+
+A quick result from our live test: 34 posts imported, 34 unique rows after a repeat import. A deliberately missing destination tab failed clearly; restoring it let the original run import successfully. This is a tested example, not a guarantee for concurrent writers or every possible failure.
+
+7. Check incomplete runs
+The workflow imports available rows before reporting a PARTIAL, FAILED or missing final report as needing attention. A PARTIAL warning can be expected when the 20-post limit leaves older posts to collect: available rows have already been imported. Inspect the channel report, then clear resumeRunId to collect the next batch using the same monitorId. Re-importing the same run retries its saved rows; it does not collect the next batch. A hard timeout can leave a useful dataset without a final report. If Sheets fails midway, fix the connection and retry the original run ID. If a start request times out without an ID, check Apify Console before starting again: the original request may already have started a run.
+
+8. Schedule only after testing
+Once manual collection and re-import both work, add your preferred schedule. Keep one execution writing to the same monitor and sheet at a time. Choose frequency based on how quickly you need updates: every new run has its own start fee. Keep execution history and Apify datasets long enough to recover failed imports.
+
+Limits
+Only public readable web previews are supported; private groups, comments, member lists, and edit/delete tracking are outside this release. Normal collection avoids old posts, but a crash can replay a batch; matching Sheet rows by id is important. This template refuses datasets larger than its 10,000-row fetch instead of silently truncating them. It does not provide transactional writes or concurrent-writer protection in Google Sheets. Posts removed before collection cannot be recovered.
+
+Support
+Use the Actor’s Issues tab with the run ID, affected channel and error code. Do not include tokens or private messages.
+
+Try the Actor: https://apify.com/humming_cobalt/telegram-channel-watch
+
+References
+https://docs.n8n.io/integrations/builtin/app-nodes/n8n-nodes-base.googlesheets/sheet-operations/
+https://docs.apify.com/api/v2/actors-runs-post
+https://docs.apify.com/api/v2/dataset-items-get
